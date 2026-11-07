@@ -1,0 +1,14 @@
+torch>=2.0
+monai[nibabel,tqdm,einops]>=1.3
+nibabel>=5.0
+pydicom>=2.4
+numpy
+scipy
+pandas
+matplotlib
+pyyaml
+tensorboard
+onnx
+onnxruntime
+medpy
+pytest
