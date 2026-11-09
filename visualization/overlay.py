@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 def overlay_slice(ax, image_slice, mask_slice, alpha=0.4):
     ax.imshow(np.rot90(image_slice), cmap="gray")
     masked = np.ma.masked_where(np.rot90(mask_slice) == 0, np.rot90(mask_slice))
-    ax.imshow(masked, cmap="autumn", alpha=alpha, interpolation="none")
+    ax.imshow(masked, cmap="autumn", vmin=1, vmax=2, alpha=alpha, interpolation="none")
     ax.axis("off")
 
 
