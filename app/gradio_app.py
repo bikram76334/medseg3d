@@ -1,4 +1,14 @@
+#!/usr/bin/env python3
+"""
+app/gradio_app.py - small web interface for the segmentation pipeline.
 
+Run from the project root:
+    python app/gradio_app.py
+then open http://127.0.0.1:7860
+
+Upload a NIfTI scan, pick a model (.onnx or .pt), click Run, scroll through the slices
+with the overlay, and download the mask. Uses scripts/predict.py as the engine.
+"""
 import argparse
 import sys
 import tempfile

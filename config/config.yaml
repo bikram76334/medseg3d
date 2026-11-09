@@ -1,0 +1,59 @@
+# Config for MSD Task04 Hippocampus (brain MRI, 3 classes). All paths are relative.
+project:
+  name: medseg3d-hippocampus
+  seed: 42
+
+paths:
+  data_root: datasets/raw/Task04_Hippocampus   # folder that contains imagesTr/ and labelsTr/
+  ckpt_dir: outputs/checkpoints
+  log_dir: outputs/logs
+  pred_dir: outputs/predictions
+  overlay_dir: outputs/overlays
+  onnx_dir: outputs/onnx
+
+data:
+  dataset: Task04_Hippocampus
+  num_classes: 3              # background, anterior, posterior
+  in_channels: 1
+  split: {train: 0.8, val: 0.1, test: 0.1}
+  spacing: [1.0, 1.0, 1.0]    # mm
+  orientation: RAS
+  intensity:
+    mode: zscore              # zscore for MRI | ct_window for CT
+    a_min: -57
+    a_max: 164
+  patch_size: [48, 48, 48]
+  num_samples: 2              # patches cut from each volume per iteration
+  max_cases: null             # set e.g. 20 for a quick debug run
+  cache_rate: 1.0
+  num_workers: 0              # use 2 on Kaggle (0 is safest on Windows)
+
+model:
+  name: unet3d                # unet3d | monai_unet
+  base_channels: 32
+  levels: 4                   # 48 -> 24 -> 12 -> 6
+  norm: instance
+  dropout: 0.1
+
+train:
+  epochs: 120
+  batch_size: 4               # x num_samples = 8 patches per step
+  lr: 2.0e-4
+  weight_decay: 1.0e-5
+  amp: true
+  val_interval: 2
+  grad_clip: 1.0
+  loss: {dice_weight: 0.5, ce_weight: 0.5}
+  resume: false
+
+infer:
+  roi_size: [48, 48, 48]
+  sw_batch_size: 4
+  overlap: 0.5
+  blend: gaussian
+  postprocess: {largest_component: true, fill_holes: true}
+
+viz:
+  alpha: 0.4
+  n_slices: 8
+  plane: axial

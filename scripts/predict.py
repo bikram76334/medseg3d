@@ -1,4 +1,17 @@
+#!/usr/bin/env python3
+"""
+scripts/predict.py - lightweight inference engine + command line tool.
 
+Needs only: numpy, scipy, nibabel (+ onnxruntime for .onnx, or torch for .pt).
+MONAI is NOT required, so this runs on any normal machine.
+
+Examples
+--------
+python scripts/predict.py --input scan.nii.gz --output mask.nii.gz --model outputs/onnx/model.onnx
+python scripts/predict.py --input scan.nii.gz --output mask.nii.gz --model outputs/checkpoints/best.pt
+python scripts/predict.py --input scan.nii.gz --output mask.nii.gz --demo      # no model, UI/pipeline test only
+python scripts/predict.py --input scan.nii.gz --output mask.nii.gz --model m.onnx --overlay overlay.png
+"""
 import argparse
 import sys
 from pathlib import Path
@@ -127,8 +140,18 @@ def normalize(x, cfg):
     return out
 
 
+def open_volume(path):
+    """NIfTI file, or a folder of DICOM slices (read with data/volume_io.py)."""
+    if Path(path).is_dir():
+        sys.path.insert(0, str(ROOT))
+        from data.volume_io import load_dicom_series
+        vol, aff, _ = load_dicom_series(path)
+        return nib.Nifti1Image(vol, aff)
+    return nib.load(str(path))
+
+
 def preprocess(path, cfg):
-    orig = nib.load(str(path))
+    orig = open_volume(path)
     canon = nib.as_closest_canonical(orig)        # RAS orientation
     data = np.asarray(canon.dataobj, dtype=np.float32)
     if data.ndim == 4:
@@ -278,7 +301,7 @@ def render_overlay(image, mask, plane="axial", idx=None, alpha=0.4):
 # ----------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser(description="3D segmentation inference (ONNX / PyTorch)")
-    ap.add_argument("--input", required=True, help="NIfTI scan (.nii / .nii.gz)")
+    ap.add_argument("--input", required=True, help="NIfTI scan (.nii / .nii.gz) or a DICOM folder")
     ap.add_argument("--output", required=True, help="where to save the mask (.nii.gz)")
     ap.add_argument("--model", default=str(ROOT / "outputs" / "onnx" / "model.onnx"),
                     help=".onnx or .pt file")
