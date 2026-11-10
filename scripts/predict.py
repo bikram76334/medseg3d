@@ -10,7 +10,7 @@ Examples
 python scripts/predict.py --input scan.nii.gz --output mask.nii.gz --model outputs/onnx/model.onnx
 python scripts/predict.py --input scan.nii.gz --output mask.nii.gz --model outputs/checkpoints/best.pt
 python scripts/predict.py --input scan.nii.gz --output mask.nii.gz --demo      # no model, UI/pipeline test only
-python scripts/predict.py --input scan.nii.gz --output mask.nii.gz --model m.onnx --overlay overlay.png
+python scripts/predict.py --input scan.nii.gz --output mask.nii.gz --model m.onnx --overlay overlay.png --montage montage.png
 """
 import argparse
 import sys
@@ -281,7 +281,13 @@ def best_slice(mask, plane="axial"):
     return int(np.argmax(counts)) if counts.max() > 0 else mask.shape[axis] // 2
 
 
-def render_overlay(image, mask, plane="axial", idx=None, alpha=0.4):
+def auto_scale(shape_hw, target=640):
+    """Integer zoom so the longest side is about `target` pixels."""
+    return max(1, int(round(target / max(shape_hw))))
+
+
+def render_overlay(image, mask, plane="axial", idx=None, alpha=0.4, scale=None):
+    """RGB overlay of one slice. scale=None -> about 640 px; scale=1 -> native voxel size."""
     axis = AXES[plane]
     n = image.shape[axis]
     idx = n // 2 if idx is None else int(np.clip(idx, 0, n - 1))
@@ -293,7 +299,36 @@ def render_overlay(image, mask, plane="axial", idx=None, alpha=0.4):
     col = PALETTE[np.clip(ms, 0, len(PALETTE) - 1)].astype(np.float32)
     m = (ms > 0)[..., None]
     rgb = np.where(m, (1 - alpha) * rgb + alpha * col, rgb)
-    return np.rot90(rgb).astype(np.uint8)
+    out = np.rot90(rgb).astype(np.uint8)
+    z = auto_scale(out.shape[:2]) if scale is None else int(scale)
+    return np.kron(out, np.ones((z, z, 1), dtype=np.uint8)) if z > 1 else out
+
+
+def save_montage(image, mask, out_png, plane="axial", n_slices=8, alpha=0.4, cols=4, dpi=200):
+    """Large figure: several slices spread over the segmented region, titled, with a class legend."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+    axis = AXES[plane]
+    other = tuple(a for a in range(3) if a != axis)
+    has = np.where((mask > 0).sum(axis=other) > 0)[0]
+    if len(has) == 0:
+        has = np.arange(image.shape[axis])
+    idxs = np.unique(np.linspace(has[0], has[-1], min(n_slices, len(has))).round().astype(int))
+    rows = int(np.ceil(len(idxs) / cols))
+    fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4.4 * rows), squeeze=False)
+    for ax in axes.ravel():
+        ax.axis("off")
+    for ax, k in zip(axes.ravel(), idxs):
+        ax.imshow(render_overlay(image, mask, plane, k, alpha, scale=1), interpolation="nearest")
+        ax.set_title(f"{plane} slice {k}", fontsize=11)
+    handles = [Patch(color=PALETTE[c] / 255.0, label=f"class {c}") for c in range(1, int(mask.max()) + 1)]
+    if handles:
+        fig.legend(handles=handles, loc="lower center", ncol=len(handles), fontsize=11)
+    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    fig.savefig(str(out_png), dpi=dpi)
+    plt.close(fig)
 
 
 # ----------------------------------------------------------------------------
@@ -307,7 +342,11 @@ def main():
                     help=".onnx or .pt file")
     ap.add_argument("--config", default=None)
     ap.add_argument("--demo", action="store_true", help="no model: threshold demo for testing")
-    ap.add_argument("--overlay", default=None, help="optional PNG with the mask on the best slice")
+    ap.add_argument("--overlay", default=None, help="optional large PNG: mask on the best slice")
+    ap.add_argument("--montage", default=None, help="optional large PNG: several slices with a legend")
+    ap.add_argument("--slices", type=int, default=8, help="slices in the montage")
+    ap.add_argument("--scale", type=int, default=None, help="zoom for --overlay (default: auto, about 640 px)")
+    ap.add_argument("--alpha", type=float, default=0.4, help="overlay opacity")
     ap.add_argument("--plane", default="axial", choices=list(AXES))
     ap.add_argument("--no-postprocess", action="store_true")
     a = ap.parse_args()
@@ -325,8 +364,11 @@ def main():
     if a.overlay:
         import matplotlib.image as mpimg
         k = best_slice(res["mask"], a.plane)
-        mpimg.imsave(a.overlay, render_overlay(res["image"], res["mask"], a.plane, k))
+        mpimg.imsave(a.overlay, render_overlay(res["image"], res["mask"], a.plane, k, a.alpha, a.scale))
         print(f"saved overlay: {a.overlay} ({a.plane} slice {k})")
+    if a.montage:
+        save_montage(res["image"], res["mask"], a.montage, a.plane, a.slices, a.alpha)
+        print(f"saved montage: {a.montage}")
 
 
 if __name__ == "__main__":

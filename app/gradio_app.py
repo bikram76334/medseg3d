@@ -76,8 +76,11 @@ def run(scan, model_file, use_demo, mode, a_min, a_max, overlap, plane, alpha,
     if use_demo:
         lines.append("DEMO MODE: simple intensity threshold, NOT a trained model.")
 
+    png = out_dir / "overlay_montage.png"
+    P.save_montage(res["image"], res["mask"], png, plane, 8, alpha)
+
     return (img, gr.update(minimum=0, maximum=n - 1, value=k, visible=True),
-            "\n".join(lines), str(out_file), state)
+            "\n".join(lines), str(out_file), str(png), state)
 
 
 def show(state, plane, idx, alpha):
@@ -124,10 +127,11 @@ def build_ui():
                 slice_idx = gr.Slider(0, 1, value=0, step=1, label="Slice", visible=False)
                 info = gr.Textbox(label="Result", lines=5, interactive=False)
                 mask_file = gr.File(label="Download mask (.nii.gz)", interactive=False)
+                montage_file = gr.File(label="Download overlay image (large PNG, 8 slices)", interactive=False)
 
         run_btn.click(run,
                       [scan, model, demo_mode, mode, a_min, a_max, overlap, plane, alpha],
-                      [view, slice_idx, info, mask_file, state])
+                      [view, slice_idx, info, mask_file, montage_file, state])
         slice_idx.change(show, [state, plane, slice_idx, alpha], view)
         alpha.change(show, [state, plane, slice_idx, alpha], view)
         plane.change(change_plane, [state, plane, alpha], [view, slice_idx])
